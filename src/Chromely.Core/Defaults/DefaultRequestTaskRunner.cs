@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Chromely.Core.Configuration;
 using Chromely.Core.Infrastructure;
 using Chromely.Core.Network;
@@ -23,11 +24,7 @@ namespace Chromely.Core.Defaults
             var routePath = new RoutePath(method, path);
             if (routePath == null || string.IsNullOrWhiteSpace(routePath?.Path))
             {
-                response.ReadyState = (int)ReadyState.ResponseIsReady;
-                response.Status = (int)System.Net.HttpStatusCode.BadRequest;
-                response.StatusText = "Bad Request";
-
-                return response;
+                return GetBadRequestResponse(null);
             }
 
             if (routePath.Path.ToLower().Equals("/info"))
@@ -51,20 +48,12 @@ namespace Chromely.Core.Defaults
             var response = new ChromelyResponse(request.Id);
             if (request.RoutePath == null)
             {
-                response.ReadyState = (int)ReadyState.ResponseIsReady;
-                response.Status = (int)System.Net.HttpStatusCode.BadRequest;
-                response.StatusText = "Bad Request";
-
-                return response;
+                return GetBadRequestResponse(request.Id);
             }
 
             if (string.IsNullOrEmpty(request.RoutePath.Path))
             {
-                response.ReadyState = (int)ReadyState.ResponseIsReady;
-                response.Status = (int)System.Net.HttpStatusCode.BadRequest;
-                response.StatusText = "Bad Request";
-
-                return response;
+                return GetBadRequestResponse(request.Id);
             }
 
             if (request.RoutePath.Path.ToLower().Equals("/info"))
@@ -90,11 +79,7 @@ namespace Chromely.Core.Defaults
             var response = new ChromelyResponse(requestId);
             if (string.IsNullOrEmpty(routePath.Path))
             {
-                response.ReadyState = (int)ReadyState.ResponseIsReady;
-                response.Status = (int)System.Net.HttpStatusCode.BadRequest;
-                response.StatusText = "Bad Request";
-
-                return response;
+                return GetBadRequestResponse(requestId);
             }
 
             if (routePath.Path.ToLower().Equals("/info"))
@@ -112,6 +97,29 @@ namespace Chromely.Core.Defaults
             return ExecuteRoute(requestId, routePath, parameters, postData, requestData);
         }
 
+        public async Task<ChromelyResponse> RunAsync(string requestId, RoutePath routePath, IDictionary<string, string> parameters, object postData, string requestData)
+        {
+            var response = new ChromelyResponse(requestId);
+            if (string.IsNullOrEmpty(routePath.Path))
+            {
+                return GetBadRequestResponse(requestId);
+            }
+
+            if (routePath.Path.ToLower().Equals("/info"))
+            {
+                response = GetInfo();
+                return response;
+            }
+
+            var route = ServiceRouteProvider.GetActionRoute(_container, routePath);
+            if (route == null)
+            {
+                throw new Exception($"Route for path = {routePath} is null or invalid.");
+            }
+
+            return await ExecuteRouteAsync(requestId, routePath, parameters, postData, requestData);
+        }
+
         private ChromelyResponse ExecuteRoute(string requestId, RoutePath routePath, IDictionary<string, string> parameters, object postData, string requestData)
         {
             var route = ServiceRouteProvider.GetActionRoute(_container, routePath);
@@ -122,6 +130,32 @@ namespace Chromely.Core.Defaults
             }
 
             var response = route.Invoke(requestId: requestId, routePath: routePath, parameters: parameters, postData: postData, rawJson: requestData);
+            response.ReadyState = (int)ReadyState.ResponseIsReady;
+            response.Status = (int)System.Net.HttpStatusCode.OK;
+            response.StatusText = "OK";
+
+            return response;
+        }
+
+        private async Task<ChromelyResponse> ExecuteRouteAsync(string requestId, RoutePath routePath, IDictionary<string, string> parameters, object postData, string requestData)
+        {
+            var route = ServiceRouteProvider.GetActionRoute(_container, routePath);
+
+            if (route == null)
+            {
+                throw new Exception($"Route for path = {routePath} is null or invalid.");
+            }
+
+            ChromelyResponse response;
+            if (route.IsAsync)
+            {
+                response = await route.InvokeAsync(requestId: requestId, routePath: routePath, parameters: parameters, postData: postData, rawJson: requestData);
+            }
+            else
+            {
+                response = route.Invoke(requestId: requestId, routePath: routePath, parameters: parameters, postData: postData, rawJson: requestData);
+            }
+
             response.ReadyState = (int)ReadyState.ResponseIsReady;
             response.Status = (int)System.Net.HttpStatusCode.OK;
             response.StatusText = "OK";
@@ -159,5 +193,15 @@ namespace Chromely.Core.Defaults
             return response;
         }
 
+        private ChromelyResponse GetBadRequestResponse(string requestId)
+        {
+            return new ChromelyResponse
+            {
+                RequestId = requestId,
+                ReadyState = (int)ReadyState.ResponseIsReady,
+                Status = (int)System.Net.HttpStatusCode.BadRequest,
+                StatusText = "Bad Request"
+            };
+        }
     }
 }

@@ -39,7 +39,7 @@ namespace Chromely.CefGlue.Browser.Handlers
 
             if (RoutePath.ValidMethod(method))
             {
-                new Task(() =>
+                new Task( async () =>
                 {
                     var id = requestData.id ??  string.Empty;
                     var path = requestData.url ?? string.Empty;
@@ -47,7 +47,7 @@ namespace Chromely.CefGlue.Browser.Handlers
                     var postData = requestData.postData;
 
                     var routePath = new RoutePath(method, path);
-                    var response = _requestTaskRunner.Run(id, routePath, parameters, postData, request);
+                    var response = await _requestTaskRunner.RunAsync(id, routePath, parameters, postData, request);
                     var jsonResponse = response.ToJson();
 
                     callback.Success(jsonResponse);
